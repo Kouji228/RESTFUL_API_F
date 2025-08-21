@@ -159,13 +159,65 @@ router.post("/", upload.none(), async (req, res)=>{
 });
 
 // 更新(特定 ID 的)使用者
-router.put("/:id", (req, res)=>{
-  const id = req.params.id;
-  res.status(200).json({
-    status: "success",
-    data: {id},
-    message: "更新(特定 ID 的)使用者 成功"
-  });
+router.put("/:id", checkToken, upload.none(), async (req, res)=>{
+  try{
+    // 取得表單中的欄位內容
+    const id = req.params.id;
+    const {password, head} = req.body;
+    
+    // 檢查至少要有一個欄位有資料
+    if(!password && !head){
+      const err = new Error("請提至少提供一個要更新的資料");
+      err.code = 400;
+      err.status = "fail";
+      throw err;
+    }
+   let updateFields = []; // 用陣列來記錄要更新的欄位
+   let values = []; // 用陣列來記錄要更新的欄位的值
+
+   if (password) {
+     // 如果有 password 這個欄位
+     const hashedPassword = await bcrypt.hash(password, 10); // 加密
+     updateFields.push("password = ?"); // 欄位部份的 SQL
+     values.push(hashedPassword); // 問號對應的值
+   }
+   if (head) {
+     // 如果有 head 這個欄位
+     updateFields.push("head = ?"); // 欄位部份的 SQL
+     values.push(head); // 問號對應的值
+   }
+
+   values.push(id); // SQL 的最後有用 id 來查詢
+
+   console.log(updateFields);
+   console.log(values);
+   
+   const sql = `UPDATE users SET ${updateFields.join(", ")} WHERE account = ?`;
+   const [result] = await connection.execute(sql, values);
+   console.log(result);
+   if(!result.affectedRows || result.affectedRows != 0){
+      const err = new Error("更新失敗，請洽管理人員");
+      err.code = 400;
+      err.status = "fail";
+      throw err;
+   }
+
+   res.status(200).json({
+     status: "success",
+     message: "使用者資料更新成功",
+   });
+
+  }catch(error){
+    // 補獲錯誤
+    console.log(error);
+    const statusCode = error.code ?? 500;
+    const statusText = error.status ?? "error";
+    const message = error.message ?? "註冊失敗，請洽管理人員";
+    res.status(statusCode).json({
+      status: statusText,
+      message
+    });
+  }
 });
 
 // 刪除(特定 ID 的)使用者
